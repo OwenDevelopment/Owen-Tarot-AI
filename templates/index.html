@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tiệm bài tarot của Owen</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="page">
+        <div class="hero">
+            <h1>🔮 Tiệm bài tarot của Owen</h1>
+            <p class="hero-subtitle">Rút bài, nhận diễn giải từ Owen và tiếp tục trò chuyện như một phiên tarot thật sự.</p>
+
+            <div class="badges">
+                <span class="badge">{{ "AI: ON" if ai_enabled else "AI: OFF" }}</span>
+                <span class="badge">78 lá</span>
+                <span class="badge">1 / 3 / 10 lá</span>
+                <span class="badge">PC + Mobile</span>
+            </div>
+        </div>
+
+        <div class="layout">
+            <div class="left-col">
+                <section class="panel main-panel">
+                    <h2>Rút bài</h2>
+
+                    <form method="POST" class="draw-form" id="drawForm">
+                        <label for="question">Câu hỏi của bạn</label>
+                        <textarea
+                            id="question"
+                            name="question"
+                            rows="3"
+                            placeholder="Ví dụ: Chuyện tình cảm của mình trong thời gian tới sẽ như thế nào?"
+                            required
+                        >{{ result.question if result else "" }}</textarea>
+
+                        <div class="spread-wrap">
+                            <label>Chọn trải bài</label>
+                            <div class="spread-options" id="spreadOptions">
+                                <label class="spread-option">
+                                    <input type="radio" name="spread" value="1" {% if selected_spread == "1" %}checked{% endif %}>
+                                    <span>1 lá</span>
+                                </label>
+                                <label class="spread-option">
+                                    <input type="radio" name="spread" value="3" {% if selected_spread == "3" %}checked{% endif %}>
+                                    <span>3 lá</span>
+                                </label>
+                                <label class="spread-option">
+                                    <input type="radio" name="spread" value="10" {% if selected_spread == "10" %}checked{% endif %}>
+                                    <span>10 lá</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div class="preview-area">
+                            <div class="preview-cards" id="previewCards"></div>
+                        </div>
+
+                        <button type="submit" class="primary-btn" id="drawBtn">Rút bài ngay</button>
+                    </form>
+
+                    {% if error_message %}
+                        <div class="alert error">{{ error_message }}</div>
+                    {% endif %}
+                </section>
+
+                {% if result %}
+                <section class="panel result-panel">
+                    <div class="result-head">
+                        <h2>Kết quả trải bài</h2>
+                        <div class="result-meta">
+                            <span class="mini-badge">{{ result.spread }} lá</span>
+                            <span class="mini-badge">{{ "AI Reading" if result.used_ai else "Local Reading" }}</span>
+                        </div>
+                    </div>
+
+                    <div class="question-box">
+                        <strong>Câu hỏi:</strong>
+                        <p>{{ result.question }}</p>
+                    </div>
+
+                    <div class="cards-grid cards-{{ result.cards|length }}">
+                        {% for card in result.cards %}
+                        <div class="tarot-card">
+                            <div class="card-image-wrap {% if card.reversed %}reversed{% endif %}">
+                                <img
+                                    src="{{ card.image if card.image else url_for('card_image', slug=card.slug) }}"
+                                    alt="{{ card.name }}"
+                                    class="card-image"
+                                    loading="lazy"
+                                >
+                            </div>
+
+                            <div class="card-info">
+                                <h3>{{ card.position }}</h3>
+                                <h4>{{ card.name }}</h4>
+                                <p class="orientation">
+                                    {{ "Ngược" if card.reversed else "Xuôi" }}
+                                </p>
+                                <p>{{ card.meaning_rev if card.reversed else card.meaning_up }}</p>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="reading-box">
+                        <h3>Diễn giải của Owen</h3>
+                        <div class="reading-content">{{ result.reading }}</div>
+                    </div>
+
+                    <div class="suggestion-panel">
+                        <h3>Chưa biết hỏi gì tiếp?</h3>
+                        <div class="suggestion-list">
+                            {% for item in suggestions %}
+                                <button type="button" class="suggestion-chip" data-suggestion="{{ item }}">{{ item }}</button>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <div class="action-row">
+                        <button type="button" id="clearHistoryBtn" class="danger-btn">Rút lại từ đầu</button>
+                    </div>
+                </section>
+                {% endif %}
+            </div>
+
+            <div class="right-col">
+                <section class="panel ai-panel sticky-panel">
+                    <div class="chat-header">
+                <div>
+        <h2>Trò chuyện với Owen AI</h2>
+        <p>Hỏi sâu hơn về lá bài, mối liên hệ giữa các lá hoặc điều bạn đang băn khoăn lúc này.</p>
+    </div>
+    <div class="mini-badge">{{ "Chat AI đang bật" if ai_enabled else "Chat AI đang tắt" }}</div>
+</div>
+
+                    <div id="chatBox" class="chat-box">
+
+                    <div class="chat-row bot">
+                        <div class="chat-avatar">🔮</div>
+                        <div class="chat-message bot">Xin chào, mình là Owen.<br><br>Sau khi bạn rút bài, mình có thể cùng bạn đào sâu từng lá, kết nối các lá với nhau và giúp bạn nhìn rõ hơn điều đang diễn ra.</div>
+                    </div>
+
+                        {% if history %}
+                            {% for item in history %}
+                                {% if item.role == "user" %}
+                                    <div class="chat-row user">
+                                        <div class="chat-message user">{{ item.content }}</div>
+                                    </div>
+                                {% elif item.role == "assistant" %}
+                                    <div class="chat-row bot">
+                                        <div class="chat-avatar">🔮</div>
+                                        <div class="chat-message bot">{{ item.content }}</div>
+                                    </div>
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    </div>
+
+                    <div class="chat-input-wrap messenger-box">
+                        <textarea id="userMessage" placeholder="Nhập điều bạn muốn hỏi Owen..." rows="3"></textarea>
+                        <div class="messenger-actions">
+                            <button type="button" id="sendBtn" class="primary-btn">Gửi</button>
+                            <button type="button" id="clearChatBtn" class="secondary-btn">Xóa trò chuyện</button>
+                        </div>
+                    </div>
+
+                    {% if suggestions %}
+                    <div class="mobile-suggestions">
+                        <div class="suggestion-list compact">
+                            {% for item in suggestions %}
+                                <button type="button" class="suggestion-chip" data-suggestion="{{ item }}">{{ item }}</button>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </section>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const spreadOptions = document.querySelectorAll('input[name="spread"]');
+        const previewCards = document.getElementById("previewCards");
+        const drawForm = document.getElementById("drawForm");
+        const drawBtn = document.getElementById("drawBtn");
+
+        function renderPreviewCards(count) {
+            previewCards.innerHTML = "";
+
+            for (let i = 0; i < count; i++) {
+                const card = document.createElement("div");
+                card.className = "preview-card";
+                card.innerHTML = `<img src="/card-back?v=3" alt="Card back">`;
+                previewCards.appendChild(card);
+            }
+        }
+
+        function getSelectedSpread() {
+            const checked = document.querySelector('input[name="spread"]:checked');
+            return checked ? parseInt(checked.value, 10) : 1;
+        }
+
+        spreadOptions.forEach(option => {
+            option.addEventListener("change", () => {
+                renderPreviewCards(getSelectedSpread());
+            });
+        });
+
+        renderPreviewCards(getSelectedSpread());
+
+        const chatBox = document.getElementById("chatBox");
+        const userMessage = document.getElementById("userMessage");
+        const sendBtn = document.getElementById("sendBtn");
+        const clearChatBtn = document.getElementById("clearChatBtn");
+        const clearHistoryBtn = document.getElementById("clearHistoryBtn");
+        const suggestionChips = document.querySelectorAll(".suggestion-chip");
+
+        function addMessage(text, sender) {
+            const row = document.createElement("div");
+            row.className = `chat-row ${sender}`;
+
+            if (sender === "bot") {
+                row.innerHTML = `
+                    <div class="chat-avatar">🔮</div>
+                    <div class="chat-message bot"></div>
+                `;
+                row.querySelector(".chat-message").textContent = text;
+            } else {
+                row.innerHTML = `
+                    <div class="chat-message user"></div>
+                `;
+                row.querySelector(".chat-message").textContent = text;
+            }
+
+            chatBox.appendChild(row);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function fillSuggestion(text) {
+            userMessage.value = text;
+            userMessage.focus();
+            userMessage.setSelectionRange(userMessage.value.length, userMessage.value.length);
+        }
+
+        async function sendMessage() {
+            const message = userMessage.value.trim();
+            if (!message) return;
+
+            addMessage(message, "user");
+            userMessage.value = "";
+
+            const loading = document.createElement("div");
+            loading.className = "chat-row bot";
+            loading.innerHTML = `
+                <div class="chat-avatar">🔮</div>
+                <div class="chat-message bot thinking">
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                    <span class="typing-dot"></span>
+                </div>
+            `;
+            chatBox.appendChild(loading);
+
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            try {
+                const res = await fetch("/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ message })
+                });
+
+                const data = await res.json();
+                loading.remove();
+                addMessage(data.reply || "Owen chưa thể trả lời lúc này.", "bot");
+            } catch (err) {
+                loading.remove();
+                addMessage("Có lỗi khi kết nối với Owen AI.", "bot");
+            }
+        }
+
+        async function clearChat() {
+            try {
+                await fetch("/clear-chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                chatBox.innerHTML = `
+                    <div class="chat-row bot">
+                        <div class="chat-avatar">🔮</div>
+                        <div class="chat-message bot">
+                            Cuộc trò chuyện đã được làm mới. Owen vẫn ở đây nếu bạn muốn tiếp tục đào sâu trải bài của mình.
+                        </div>
+                    </div>
+                `;
+            } catch (err) {
+                alert("Không thể xóa trò chuyện lúc này.");
+            }
+        }
+
+        async function clearHistory() {
+            try {
+                await fetch("/clear-history", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                window.location.reload();
+            } catch (err) {
+                alert("Không thể reset trải bài lúc này.");
+            }
+        }
+
+        suggestionChips.forEach(chip => {
+            chip.addEventListener("click", () => fillSuggestion(chip.dataset.suggestion || chip.textContent));
+        });
+
+        sendBtn?.addEventListener("click", sendMessage);
+
+        userMessage?.addEventListener("keydown", function(e) {
+            if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        clearChatBtn?.addEventListener("click", clearChat);
+        clearHistoryBtn?.addEventListener("click", clearHistory);
+
+        if (drawForm && drawBtn) {
+            drawForm.addEventListener("submit", function(e) {
+            e.preventDefault();
+
+            drawBtn.disabled = true;
+            drawBtn.textContent = "Owen đang xáo bài...";
+            drawBtn.classList.add("is-loading");
+
+            setTimeout(() => {
+                drawForm.submit();
+        }, 1400);
+    });
+}
+    </script>
+</body>
+</html>
